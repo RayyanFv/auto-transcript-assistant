@@ -63,15 +63,47 @@ export default function Home() {
 
       recognition.onerror = (event: any) => {
         console.error("Speech recognition error:", event.error);
+        
+        // Handle specific errors
         if (event.error === "not-allowed") {
           alert("Microphone access denied. Please allow microphone access.");
+          setIsListening(false);
+        } else if (event.error === "network") {
+          console.log("Network error, will retry...");
+          // Don't stop listening, let onend handle restart
+        } else if (event.error === "no-speech") {
+          console.log("No speech detected, continuing...");
+          // This is normal, just continue
+        } else if (event.error === "aborted") {
+          console.log("Recognition aborted, will restart...");
+          // Let onend handle restart
+        } else {
+          console.log("Recognition error, will retry:", event.error);
+          // For other errors, try to continue
         }
-        setIsListening(false);
       };
 
       recognition.onend = () => {
+        console.log("Recognition ended, isListening:", isListening);
+        // Auto-restart if still supposed to be listening
         if (isListening) {
-          recognition.start();
+          console.log("Restarting recognition...");
+          try {
+            recognition.start();
+          } catch (error) {
+            console.error("Error restarting recognition:", error);
+            // If restart fails, try again after a short delay
+            setTimeout(() => {
+              if (isListening) {
+                try {
+                  recognition.start();
+                } catch (e) {
+                  console.error("Second restart attempt failed:", e);
+                  setIsListening(false);
+                }
+              }
+            }, 100);
+          }
         }
       };
 
@@ -139,13 +171,21 @@ export default function Home() {
     if (!recognitionRef.current) return;
 
     if (isListening) {
+      console.log("Stopping recognition...");
+      setIsListening(false); // Set state first to prevent auto-restart
       recognitionRef.current.stop();
       stopAudioVisualization();
-      setIsListening(false);
     } else {
-      recognitionRef.current.start();
-      startAudioVisualization();
-      setIsListening(true);
+      console.log("Starting recognition...");
+      setIsListening(true); // Set state first to enable auto-restart
+      try {
+        recognitionRef.current.start();
+        startAudioVisualization();
+      } catch (error) {
+        console.error("Error starting recognition:", error);
+        setIsListening(false);
+        alert("Failed to start speech recognition. Please refresh the page and try again.");
+      }
     }
   };
 
